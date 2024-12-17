@@ -1,0 +1,81 @@
+@isTest
+static void testGetUserStoryDetailsAccessException() {
+    Test.startTest();
+    try {
+        // Call with insufficient access to simulate exception
+        SecAPIScanController.getUserStoryDetails('invalidId');
+        System.assert(false, 'Expected an AuraHandledException due to insufficient access.');
+    } catch (AuraHandledException e) {
+        System.assertEquals('Users do not have appropriate access', e.getMessage());
+    }
+    Test.stopTest();
+}
+@isTest
+static void testRunSecAPIStatusCheckWithErrorResponse() {
+    Test.startTest();
+    SecApiMockHttpResponseGenerator fakeResponse = new SecApiMockHttpResponseGenerator(500, 'Error', '{}', null);
+    Test.setMock(HttpCalloutMock.class, fakeResponse);
+
+    try {
+        SecAPIScanController.runSecAPIStatusCheck('invalidUrl', 'testUserStoryId');
+    } catch (Exception e) {
+        System.assert(e.getMessage().contains('Error occured during 2nd Callout'));
+    }
+    Test.stopTest();
+}
+
+@isTest
+static void testRunSCAStatusCheckErrorPath() {
+    Test.startTest();
+    SecApiMockHttpResponseGenerator fakeResponse = new SecApiMockHttpResponseGenerator(404, 'Not Found', '{}', null);
+    Test.setMock(HttpCalloutMock.class, fakeResponse);
+
+    try {
+        SecAPIScanController.runSCAStatusCheck('invalidUrl', 'testUserStoryId');
+        System.assert(false, 'Expected an error exception.');
+    } catch (Exception e) {
+        System.assert(e.getMessage().contains('Error occured during 2nd SCA Callout'));
+    }
+    Test.stopTest();
+}
+@isTest
+static void testConvertStringtoDateTimeWithEdgeCases() {
+    Test.startTest();
+
+    // Valid date
+    DateTime validDate = SecAPIScanController.convertStringtoDateTime('Monday, 01 January 2020 01:01:01');
+    System.assertNotEquals(null, validDate);
+
+    // Invalid date
+    DateTime invalidDate = SecAPIScanController.convertStringtoDateTime('InvalidDate');
+    System.assertEquals(null, invalidDate);
+
+    // Edge case: Empty string
+    DateTime emptyDate = SecAPIScanController.convertStringtoDateTime('');
+    System.assertEquals(null, emptyDate);
+
+    Test.stopTest();
+}
+@isTest
+static void testGetCalloutResponseWithInvalidEndpoint() {
+    Test.startTest();
+    try {
+        SecAPIScanController.getCalloutResponse('/invalidEndpoint', 'POST', '{}');
+        System.assert(false, 'Expected an exception for invalid endpoint');
+    } catch (SecAPIScanController.customException e) {
+        System.assert(e.getMessage().contains('Error occured during HTTP callout'));
+    }
+    Test.stopTest();
+}
+@isTest
+static void testGetUserAPIKeyDetailsAccessError() {
+    Test.startTest();
+    try {
+        // Attempt API Key retrieval without permissions
+        Boolean result = SecAPIScanController.getUserAPIKeyDetails();
+        System.assert(false, 'Expected an exception for insufficient access');
+    } catch (AuraHandledException e) {
+        System.assertEquals('Users do not have API Key access', e.getMessage());
+    }
+    Test.stopTest();
+}
