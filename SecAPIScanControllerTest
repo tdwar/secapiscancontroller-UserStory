@@ -1,16 +1,16 @@
 @isTest
 public class SecAPIScanControllerTest {
-    @testSetup static void methodName() {
+    @testSetup static void setUpTestData() {
         Copado_Integration_Setting__c cis1 = new Copado_Integration_Setting__c(name = 'JIRA', external_system__c = 'JIRA', Named_Credential__c = 'Test_JIRA');
         insert cis1;
         
-        copado__Project__c pro1 = new copado__Project__c(name = 'MY JIRA Project', Project_External_Id__c = 'MTP', Copado_Integration_Setting__c = cis1.id, enable_logs__c = true,Workspace_Id__c = 'a404576b-7158-4661-9e93-19be9d8e3025',App_Id__c='Test');
+        copado__Project__c pro1 = new copado__Project__c(name = 'MY JIRA Project', Project_External_Id__c = 'MTP', Copado_Integration_Setting__c = cis1.id, enable_logs__c = true,Workspace_Id__c = 'a404576b-7158-4661-9e93-19be9d8e3025',App_Id__c='TestApp');
         insert pro1;
-        
         copado__User_Story__c userStory = new copado__User_Story__c(No_Priority_1_Violation__c=true,copado__Pull_Requests_Approved__c=true,copado__Project__c =  pro1.id);        
+        //copado__User_Story__c userStory = new copado__User_Story__c(copado__User_Story_Title__c = 'Test User Story', copado__Project__c = project.id, SEC_API_Scan_Status__c = 'Not Started', Orphan_Branch_Status__c = 'None' );
         insert userStory; 
         
-        Sec_Api_Scan_Result__c secRes = new Sec_Api_Scan_Result__c(copado_user_story__c = userStory.id);
+        Sec_Api_Scan_Result__c secRes = new Sec_Api_Scan_Result__c(copado_user_story__c = userStory.id, Scan_Status__c = 'In Progress');
         insert secRes;
     }
     
@@ -327,6 +327,91 @@ public class SecAPIScanControllerTest {
         System.assert(apiKeyExists);
        
         Test.stopTest();
-    }    
+    }
+    @isTest
+    static void testGetUserStoryDetailsAccessException() {
+        Test.startTest();
+        try {
+            // Call with insufficient access to simulate exception
+            SecAPIScanController.getUserStoryDetails('invalidId');
+            System.assert(false, 'Expected an AuraHandledException due to insufficient access.');
+        } catch (AuraHandledException e) {
+            System.assertEquals('Users do not have appropriate access', e.getMessage());
+        }
+        Test.stopTest();
+    }
+    @isTest
+    static void testRunSecAPIStatusCheckWithErrorResponse() {
+        Test.startTest();
+        SecApiMockHttpResponseGenerator fakeResponse = new SecApiMockHttpResponseGenerator(500, 'Error', '{}', null);
+        Test.setMock(HttpCalloutMock.class, fakeResponse);
+        
+        try {
+            copado__User_Story__c us = [SELECT Id FROM copado__User_Story__c LIMIT 1];
+            SecAPIScanController.runSecAPIStatusCheck('invalidUrl', us.Id);
+            System.assert(false, 'Expected an exception for HTTP 500 error response');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Error occured during 2nd Callout'));
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testRunSCAStatusCheckErrorPath() {
+        Test.startTest();
+        SecApiMockHttpResponseGenerator fakeResponse = new SecApiMockHttpResponseGenerator(404, 'Not Found', '{}', null);
+        Test.setMock(HttpCalloutMock.class, fakeResponse);
+        
+        try {
+            copado__User_Story__c us = [SELECT Id FROM copado__User_Story__c LIMIT 1];
+            SecAPIScanController.runSCAStatusCheck('invalidUrl', us.Id);
+            System.assert(false, 'Expected an error exception.');
+            System.assert(false, 'Expected an exception for HTTP 400 error response');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Error occured during 2nd SCA Callout'));
+        }
+        Test.stopTest();
+    }
+    @isTest
+    static void testConvertStringtoDateTimeWithEdgeCases() {
+        Test.startTest();
+        
+        // Valid date
+        DateTime validDate = SecAPIScanController.convertStringtoDateTime('Monday, 01 January 2020 01:01:01');
+        System.assertNotEquals(null, validDate, 'valid date should not return null');
+        
+        // Invalid date
+        DateTime invalidDate = SecAPIScanController.convertStringtoDateTime('InvalidDate');
+        System.assertEquals(null, invalidDate, 'inavlid date should return null');
+        
+        // Edge case: Empty string
+        DateTime emptyDate = SecAPIScanController.convertStringtoDateTime('');
+        System.assertEquals(null, emptyDate, 'empty string should return null');
+        
+        Test.stopTest();
+    }
+    @isTest
+    static void testGetCalloutResponseWithInvalidEndpoint() {
+        Test.startTest();
+        try {
+            SecAPIScanController.getCalloutResponse('/invalidEndpoint', 'POST', '{}');
+            System.assert(false, 'Expected an exception for invalid endpoint');
+        } catch (SecAPIScanController.customException e) {
+            System.assert(e.getMessage().contains('Error occured during HTTP callout'));
+        }
+        Test.stopTest();
+    }  
+    @isTest
+    static void testGetUserAPIKeyDetailsAccessError() {
+        Test.startTest();
+        try {
+            // Attempt API Key retrieval without permissions
+            Boolean result = SecAPIScanController.getUserAPIKeyDetails();
+            System.assert(false, 'Expected an exception for insufficient access');
+        } catch (AuraHandledException e) {
+            System.assertEquals('Users do not have API Key access', e.getMessage());
+        }
+        Test.stopTest();
+}
     
 }
