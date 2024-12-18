@@ -610,8 +610,13 @@ public with sharing class SecAPIScanController {
             copado__User_Story__c us = new copado__User_Story__c(Id=userStoryId,SCA_Scan_Status__c='Completed');
             
             //check the checkbox only if there are no Critical,High and medium security violations
-             if(sr.Critical_SCA__c==0 && sr.High_SCA__c==0 && sr.Medium_SCA__c==0){             
+             if(sr.Critical_SCA__c==0 && sr.High_SCA__c==0 && sr.Medium_SCA__c==0){ 
+                 If (sr.FailScan__c = true) {
+                     us.SecAPI_Scan_Passed__c = false;
+                 }else 
+                 { 
                 us.SecAPI_Scan_Passed__c  = true;
+                 }
             }
             else{
                 us.SecAPI_Scan_Passed__c  = false;
