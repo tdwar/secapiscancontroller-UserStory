@@ -1,0 +1,10 @@
+if (Schema.sObjectType.copado__User_Story__c.isAccessible() &&
+    Schema.sObjectType.copado__User_Story__c.fields.copado__Project__c.isAccessible() &&
+    Schema.sObjectType.copado__User_Story__c.fields.Name.isAccessible() &&
+    Schema.sObjectType.copado__User_Story__c.fields.copado__Has_Apex_Code__c.isAccessible()) {
+    List<copado__User_Story__c> lstUserStory = [SELECT id, copado__Project__r.SecAPI_Orphan_App_Id__c, Name, copado__Has_Apex_Code__c, copado__Project__r.Exclude_Files__c, copado__Project__r.Exclude_Folders__c 
+                                                FROM copado__User_Story__c 
+                                                WHERE Id =: copadoUserStoryId];
+} else {
+    throw new AuraHandledException('User does not have access to copado__User_Story__c or the required fields.');
+}
