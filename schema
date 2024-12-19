@@ -109,3 +109,25 @@ public static String SCAScan(String copadoUserStoryId) {
 
     return respSCA;
 }
+
+
+-----------------------------------
+if (!secResList.isEmpty()) {
+    // Check FLS for fields being updated
+    if (!Schema.sObjectType.SEC_API_Scan_Result__c.fields.SCA_Status_URL__c.isAccessible() ||
+        !Schema.sObjectType.SEC_API_Scan_Result__c.fields.SCA_scan_Status__c.isAccessible() ||
+        !Schema.sObjectType.SEC_API_Scan_Result__c.fields.SCA_Scan_Id__c.isAccessible()) {
+        throw new AuraHandledException('User does not have permission to access certain fields in SEC_API_Scan_Result__c.');
+    }
+
+    // Check update permission for SEC_API_Scan_Result__c
+    if (!Schema.sObjectType.SEC_API_Scan_Result__c.isUpdateable()) {
+        throw new AuraHandledException('User does not have permission to update SEC_API_Scan_Result__c records.');
+    }
+
+    // Perform the update
+    update secResList;
+} else {
+    throw new AuraHandledException('No SEC_API_Scan_Result__c records found to update.');
+}
+----------------------
