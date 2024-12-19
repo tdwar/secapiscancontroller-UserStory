@@ -8,3 +8,104 @@ if (Schema.sObjectType.copado__User_Story__c.isAccessible() &&
 } else {
     throw new AuraHandledException('User does not have access to copado__User_Story__c or the required fields.');
 }
+
+@AuraEnabled
+public static String SCAScan(String copadoUserStoryId) {
+    if (copadoUserStoryId == null) {
+        throw new AuraHandledException('User Story ID cannot be null.');
+    }
+
+    // Check object-level and field-level security for copado__User_Story__c
+    if (!Schema.sObjectType.copado__User_Story__c.isAccessible() ||
+        !Schema.sObjectType.copado__User_Story__c.fields.Name.isAccessible() ||
+        !Schema.sObjectType.copado__User_Story__c.fields.copado__Project__r.isAccessible() ||
+        !Schema.sObjectType.copado__User_Story__c.fields.copado__Project__r.SecAPI_Orphan_App_Id__c.isAccessible() ||
+        !Schema.sObjectType.copado__User_Story__c.fields.copado__Project__r.Exclude_Files__c.isAccessible() ||
+        !Schema.sObjectType.copado__User_Story__c.fields.copado__Project__r.Exclude_Folders__c.isAccessible()) {
+        throw new AuraHandledException('User does not have permission to access copado__User_Story__c fields.');
+    }
+
+    // Query copado__User_Story__c
+    List<copado__User_Story__c> lstUserStory = [
+        SELECT Id, Name, copado__Project__r.SecAPI_Orphan_App_Id__c, copado__Project__r.Exclude_Files__c, copado__Project__r.Exclude_Folders__c
+        FROM copado__User_Story__c
+        WHERE Id = :copadoUserStoryId
+    ];
+
+    if (lstUserStory.isEmpty()) {
+        throw new AuraHandledException('No User Story found for the given ID.');
+    }
+
+    // Retrieve user story details
+    copado__User_Story__c userStory = lstUserStory[0];
+    String appId = userStory.copado__Project__r.SecAPI_Orphan_App_Id__c;
+    String userStoryNumber = userStory.Name;
+    String excludeFiles = userStory.copado__Project__r.Exclude_Files__c;
+    String excludeFolders = userStory.copado__Project__r.Exclude_Folders__c;
+
+    // Prepare request body
+    String reqBody = '{"repoBranchToScan": "refs/heads/orphan/feature-' + userStoryNumber +
+        '","incremental": true,"force": false,"excludeFoldersPattern": "' + excludeFolders +
+        '","excludeFilesPattern": "' + excludeFiles + '"}';
+
+    HTTPResponse resSCA = new HTTPResponse();
+    String statusURLSCA = '';
+    String appReqId = '';
+    String respSCA = '';
+
+    // Check if user has Create access for SEC_API_Scan_Result__c
+    if (!Schema.sObjectType.SEC_API_Scan_Result__c.isCreateable()) {
+        throw new AuraHandledException('User does not have permission to create SEC_API_Scan_Result__c records.');
+    }
+
+    // Check if user has Update access for copado__User_Story__c
+    if (!Schema.sObjectType.copado__User_Story__c.isUpdateable()) {
+        throw new AuraHandledException('User does not have permission to update copado__User_Story__c records.');
+    }
+
+    try {
+        // Make the callout
+        resSCA = getCalloutResponseSCA('/start/' + appId, 'POST', reqBody);
+
+        if (resSCA != null && resSCA.getStatusCode() == 202) {
+            // Parse JSON response to get the statusUrl field values
+            JSONParser parser = JSON.createParser(resSCA.getBody());
+            while (parser.nextToken() != null) {
+                if ((parser.getCurrentToken() == JSONToken.FIELD_NAME) && (parser.getText() == 'statusUrl')) {
+                    parser.nextToken();
+                    statusURLSCA = parser.getText();
+                }
+            }
+
+            if (!String.isEmpty(statusURLSCA)) {
+                appReqId = statusURLSCA.substringAfter('status/');
+            }
+
+            // Prepare update records
+            if (!String.isEmpty(appReqId) && appReqId.contains('/')) {
+                userStory.SCA_Scan_Status__c = 'In-Progress';
+                userStory.SCA_Scan_Id__c = appReqId.split('/')[1];
+            } else {
+                userStory.SCA_Scan_Status__c = 'In-Progress';
+            }
+
+            // Update SEC_API_Scan_Result__c
+            SEC_API_Scan_Result__c sr = new SEC_API_Scan_Result__c();
+            sr.SCA_Status_URL__c = appReqId;
+            sr.SCA_scan_Status__c = 'Callout 1 Completed';
+            sr.SCA_Scan_Id__c = appReqId.split('/')[1];
+            insert sr;
+
+        } else {
+            throw new AuraHandledException('Error occurred during callout. Status Code: ' + resSCA.getStatusCode());
+        }
+
+        // Update copado__User_Story__c
+        update userStory;
+
+    } catch (Exception e) {
+        throw new AuraHandledException('Error occurred during SCA Scan: ' + e.getMessage());
+    }
+
+    return respSCA;
+}
