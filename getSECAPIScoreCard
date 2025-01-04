@@ -1,0 +1,119 @@
+@AuraEnabled
+    public Static String getSECAPIScoreCard(String scoreCardURL, String userStoryId) {
+        system.debug('VXD3378 - apex getSECAPIScoreCard '+scoreCardURL);
+        Boolean failScan;
+        String scanType ='';
+        String resp = '';
+        SECAPIParser scparser;
+        SEC_API_Scan_Result__c sr;
+        String endUrl = '/score/'+scoreCardURL;
+        List<copado__User_Story__c> toUpdateUserStories = new List<copado__User_Story__c>();
+        copado__User_Story__c us1 = new copado__User_Story__c();
+        HTTPResponse res = new HTTPResponse();
+        try{
+            res =  getCalloutResponse(endURL,'GET',null);
+            List<SEC_API_Scan_Result__c> srList = getScanResultRecord(userStoryId);
+            system.debug('VXD3378 - apex getSECAPIScoreCard getstatuscode '+res.getStatusCode());
+            //VXD3378 changes start 12/20/2024
+            //integer retvalue = res.getStatusCode();
+            //retvalue = 404;
+            //VXD3378 changes start 12/20/2024
+            if(res.getStatusCode() == 200){
+            //if(retvalue == 200){
+                scparser = (SECAPIParser)JSON.deserialize(res.getBody(), SECAPIParser.class);
+                //system.debug('Tejaswi SECAPIParser' +(res.getBody));
+                system.debug('To get json values '+ scparser);
+                if(!srList.isEmpty()){
+                    sr = srList[0];
+                    //VXD3378 CHANGES START 12/18
+                    //sr.FailScan__c = scparser.failScan;
+ 					//VXD3378 CHANGES END 12/18 */
+                    //sr.FailScan__c = (sr.Critical__c != 0 && sr.High__c != 0 && sr.Medium__c != 0 );
+                    sr.Critical__c = scparser.critical!=null?Decimal.valueOf(scparser.critical):0;
+                    system.debug('To get critical values '+ sr.Critical__c);
+                    //VXD3378 changes start 12/202/2024
+                    //sr.Critical__c = 5;
+                    //VXD3378 changes end 12/20/2024
+                    sr.High__c = scparser.high!=null?Decimal.valueOf(scparser.high):0;
+                    sr.Medium__c = scparser.medium!=null?Decimal.valueOf(scparser.medium):0;
+                    sr.Low__c = scparser.low!=null?Decimal.valueOf(scparser.low):0;
+                    sr.Copado_User_Story__c = userStoryId;
+                    sr.Scan_Type__c = scparser.scanType;
+                    sr.Req_Id__c = scparser.reqId;
+                    //VXD3378 changes start 12/18
+                    if (sr.Critical__c != 0 || sr.High__c != 0 || sr.Medium__c != 0 ) {
+                        sr.FailScan__c = true;
+                    }else {
+                        sr.FailScan__c = false;
+                    }
+                    //VXD3378 changes end 12/18
+                    sr.Scan_Status__c = 'Callout 3 Completed';
+                    system.debug('VXD3378 - apex getSECAPIScoreCard Callout3 Completed ');
+                    if(scparser.lastUpdated != null && scparser.lastUpdated != '')
+                        sr.Last_Updated__c = convertStringtoDateTime(scparser.lastUpdated);
+                    //vxd3378 changes start 12/26/2024
+                    us1 = NEW copado__User_Story__c(Id=userStoryId,SEC_API_Scan_Status__c='Completed');
+                    Boolean scaApplicable = SCARequired(us1.Id);
+                    system.debug('scaapplicable boolean value' + scaApplicable);
+                     if(scaApplicable == false){
+                         if(sr.FailScan__c == false  ){
+                     us1.SecAPI_Scan_Passed__c  = true;
+                      }
+                    else{
+                        us1.SecAPI_Scan_Passed__c  = false;
+                   
+                     }
+                     }
+                     //vxd3378 changes end 12/26/2024
+                }
+            }
+            
+            else{
+                if(!srList.isEmpty()){
+                    sr = srList[0];
+                    sr.Scan_Status__c = 'Callout 3 Failed';
+                    sr.Error_Message__c = 'Status Code '+res.getStatusCode() +', Error Message '+res.getBody();
+                    //vxd3378 changes start 12/26/2024
+                    //copado__User_Story__c us = new copado__User_Story__c(Id=userStoryId,SEC_API_Scan_Status__c='Failed');
+                    us1 = NEW copado__User_Story__c(Id=userStoryId,SEC_API_Scan_Status__c='Failed');
+                    //vxd3378 changes end 12/26/2024
+                    resp = 'Error occured during 3rd Callout. Response Status Code : ' +res.getStatusCode()+ ', Response Status : ' + res.getStatus()+', Response Message : ' + res.getBody();
+                }
+            }
+            if(sr != null && Schema.sObjectType.SEC_API_Scan_Result__c.isUpdateable()){
+                update sr;
+            }
+            //vxd3378 changes start 12/26/2024
+            /*
+            copado__User_Story__c us = new copado__User_Story__c(Id=userStoryId,SEC_API_Scan_Status__c='Completed');
+			*/
+            //vxd3378 changes end 12/26/2024
+ 			
+            // changes for ORG check - NG19     
+            //vxd3378 changes start 12/26/2024
+            /*
+            Boolean scaApplicable = SCARequired(us.Id);
+            if(scaApplicable == false){
+                us.SCA_Scan_Status__c = 'Completed';
+                if(sr.FailScan__c == false  && sr.High__c == 0 && sr.Medium__c == 0){
+                    us.SecAPI_Scan_Passed__c  = true;
+                }
+                else{
+                    us.SecAPI_Scan_Passed__c  = false;
+                    
+                }
+            }
+            */
+  //VXD3378 changes end
+            toUpdateUserStories.add(us1);
+            if(!toUpdateUserStories.isEmpty() && Schema.sObjectType.copado__User_Story__c.isUpdateable()){
+                   update toUpdateUserStories;
+            }
+            
+        }catch(Exception e){
+            system.debug('exception '+e +e.getCause()+e.getLineNumber()+e.getMessage());
+            throw new AuraHandledException('Error occured during 3rd Callout. Exception Cause : ' + +e.getCause()+ ' at Line No. ' + e.getLineNumber()+' Error Message : '+e.getMessage());
+            
+        }
+        return resp;
+    }
