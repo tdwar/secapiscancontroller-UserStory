@@ -1,3 +1,5 @@
+System.DmlException: Insert failed. First exception on row 0; first error: REQUIRED_FIELD_MISSING, Required fields are missing: [Copado_Integration_Setting__c]: [Copado_Integration_Setting__c]
+
 @isTest
 static class SecAPIScanControllerTest {
     @isTest
