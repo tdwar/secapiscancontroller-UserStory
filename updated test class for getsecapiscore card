@@ -1,0 +1,45 @@
+@isTest
+static class SecAPIScanControllerTest {
+    @isTest
+    static void testGetSECAPIScoreCard() {
+        // Create Test Data
+        copado__Project__c testProject = new copado__Project__c(Name = 'MY JIRA Project', App_Id__c = '123');
+        insert testProject;
+
+        copado__User_Story__c testUserStory = new copado__User_Story__c(
+            Name = 'Test User Story',
+            copado__Status__c = 'Active',
+            SEC_API_Scan_Status__c = 'Pending',
+            copado__Project__c = testProject.Id
+        );
+        insert testUserStory;
+
+        Sec_Api_Scan_Result__c testScanResult = new Sec_Api_Scan_Result__c(
+            copado__User_Story__c = testUserStory.Id
+        );
+        insert testScanResult;
+
+        // Mock Callout
+        SecApiMockHttpResponseGenerator fakeResponse = new SecApiMockHttpResponseGenerator(
+            200,
+            'OK',
+            '{"medium":"0","high":"0","low":"0","critical":"0","reqId":"123","scanType":"Static","failScan":false}',
+            null
+        );
+        Test.setMock(HttpCalloutMock.class, fakeResponse);
+
+        // Test Method Execution
+        Test.startTest();
+        String response = SecAPIScanController.getSECAPIScoreCard('test', testUserStory.Id);
+        Test.stopTest();
+
+        // Assertions
+        copado__User_Story__c updatedUserStory = [
+            SELECT SEC_API_Scan_Status__c, SecAPI_Scan_Passed__c 
+            FROM copado__User_Story__c 
+            WHERE Id = :testUserStory.Id
+        ];
+        System.assertEquals('Completed', updatedUserStory.SEC_API_Scan_Status__c);
+        System.assertEquals(true, updatedUserStory.SecAPI_Scan_Passed__c);
+    }
+}
